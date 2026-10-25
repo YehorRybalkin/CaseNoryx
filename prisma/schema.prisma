@@ -1,0 +1,163 @@
+// CaseNoryx — local single-user persistence (SQLite).
+// JSON payloads are stored as strings and validated with Zod in the service layer.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+/// Exactly one profile exists in local single-user mode (id = "local").
+model UserProfile {
+  id          String   @id @default("local")
+  displayName String   @default("Consultant")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  settings UserSettings?
+}
+
+model UserSettings {
+  id               String      @id @default("local")
+  profileId        String      @unique
+  profile          UserProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  theme            String      @default("system") // system | light | dark
+  coachMode        String      @default("guided") // interview | guided | learning
+  aiCoachEnabled   Boolean     @default(true)
+  aiEvaluationEnabled Boolean  @default(true)
+  updatedAt        DateTime    @updatedAt
+}
+
+/// Catalogue entry for a case. Datasets and answer keys live in code (deterministic),
+/// this row is seeded so progress can reference it relationally.
+model ConsultingCase {
+  id          String   @id // slug
+  title       String
+  difficulty  String
+  industry    String
+  sortOrder   Int
+  createdAt   DateTime @default(now())
+
+  progress     CaseProgress?
+  notes        InvestigationNote[]
+  hypotheses   Hypothesis[]
+  scenarios    SavedScenario[]
+  draft        RecommendationDraft?
+  submissions  SubmittedRecommendation[]
+  history      PerformanceHistory[]
+  activities   ActivityEvent[]
+}
+
+model CaseProgress {
+  id             String         @id @default(cuid())
+  caseId         String         @unique
+  case           ConsultingCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  status         String         @default("in_progress") // in_progress | submitted | completed
+  lastTab        String         @default("brief")
+  startedAt      DateTime       @default(now())
+  lastActivityAt DateTime       @default(now())
+  completedAt    DateTime?
+  attempts       Int            @default(0)
+}
+
+model InvestigationNote {
+  id        String         @id @default(cuid())
+  caseId    String
+  case      ConsultingCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  content   String
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@index([caseId])
+}
+
+model Hypothesis {
+  id           String         @id @default(cuid())
+  caseId       String
+  case         ConsultingCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  title        String
+  description  String         @default("")
+  supporting   String         @default("")
+  contradicting String        @default("")
+  confidence   Int            @default(50) // 0-100
+  status       String         @default("untested") // untested | supported | contradicted | inconclusive
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@index([caseId])
+}
+
+model SavedScenario {
+  id        String         @id @default(cuid())
+  caseId    String
+  case      ConsultingCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  name      String
+  inputs    String // JSON: Record<leverId, number>
+  results   String // JSON: ScenarioResult snapshot at save time
+  createdAt DateTime       @default(now())
+
+  @@index([caseId])
+}
+
+model RecommendationDraft {
+  id        String         @id @default(cuid())
+  caseId    String         @unique
+  case      ConsultingCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  content   String // JSON: RecommendationContent
+  updatedAt DateTime       @updatedAt
+}
+
+/// Immutable snapshot of a submission. Never updated after creation.
+model SubmittedRecommendation {
+  id          String         @id @default(cuid())
+  caseId      String
+  case        ConsultingCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  attempt     Int
+  content     String // JSON: RecommendationContent
+  submittedAt DateTime       @default(now())
+  evaluation  Evaluation?
+
+  @@unique([caseId, attempt])
+  @@index([caseId])
+}
+
+model Evaluation {
+  id             String                  @id @default(cuid())
+  submissionId   String                  @unique
+  submission     SubmittedRecommendation @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  overallScore   Float? // null when not all dimensions were meaningfully assessed
+  objectiveScore Float // objective dimensions normalised to 0-100
+  method         String // deterministic | deterministic+ai
+  report         String // JSON: EvaluationReport
+  createdAt      DateTime                @default(now())
+}
+
+/// Denormalised history row written once per evaluation, used by dashboards.
+model PerformanceHistory {
+  id             String         @id @default(cuid())
+  caseId         String
+  case           ConsultingCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  evaluationId   String         @unique
+  attempt        Int
+  difficulty     String
+  overallScore   Float?
+  objectiveScore Float
+  dimensions     String // JSON: Record<dimensionId, {score,max,method}>
+  createdAt      DateTime       @default(now())
+
+  @@index([caseId])
+}
+
+model ActivityEvent {
+  id        String          @id @default(cuid())
+  caseId    String?
+  case      ConsultingCase? @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  type      String
+  message   String
+  createdAt DateTime        @default(now())
+
+  @@index([createdAt])
+}
