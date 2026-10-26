@@ -14,7 +14,7 @@ let cached: z.infer<typeof EnvSchema> | null = null;
 export function env() {
   if (cached) return cached;
   const parsed = EnvSchema.safeParse({
-    DATABASE_URL: process.env.DATABASE_URL,
+    DATABASE_URL: process.env.DATABASE_URL || "file:./dev.db",
     ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
     ANTHROPIC_MODEL: process.env.ANTHROPIC_MODEL || undefined,
     AI_TIMEOUT_MS: process.env.AI_TIMEOUT_MS || undefined,

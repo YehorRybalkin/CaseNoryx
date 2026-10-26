@@ -103,8 +103,7 @@ Requirements: **Node.js 20+** (tested on 22) and npm.
 
 ```bash
 npm install          # also runs `prisma generate`
-cp .env.example .env # DATABASE_URL defaults to a local SQLite file
-npm run setup        # prisma generate + create the database + seed (profile, settings, 5 cases)
+npm run setup        # creates .env if missing, then the database + seed (profile, settings, 5 cases)
 npm run dev          # http://localhost:3000
 ```
 
@@ -114,6 +113,8 @@ Production mode:
 npm run build
 npm run start
 ```
+
+`npm run setup` works the same on Windows, macOS and Linux: it creates `.env` from `.env.example` when it is missing (no `cp` needed). If `DATABASE_URL` is not set, the app falls back to `file:./dev.db`.
 
 The seed never creates user activity — the dashboard starts empty and fills only from your own work. All user data lives in `prisma/dev.db` and survives restarts. To start over, use **Settings → Danger zone → Reset all progress**, or delete `prisma/dev.db` and run `npm run setup` again.
 
